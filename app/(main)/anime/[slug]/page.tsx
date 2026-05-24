@@ -13,8 +13,25 @@ type Props = { params: { slug: string } };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const slug = params.slug;
-  const title = `${slug.replace(/-/g, " ")} | Kagenime`;
-  return { title };
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  // Try DB first for rich metadata
+  let anime = await getAnimeFromDb(slug);
+  if (!anime) {
+    const results = await fetchSearch(slug.replace(/-/g, " "), 1);
+    anime = results?.[0] ?? null;
+  }
+  if (!anime) return { title: `${slug.replace(/-/g, " ")} | Kagenime` };
+
+  return {
+    title: `${anime.title} | Kagenime`,
+    description: anime.description ?? undefined,
+    openGraph: {
+      title: `${anime.title} | Kagenime`,
+      description: anime.description ?? undefined,
+      images: anime.bannerImage ? [anime.bannerImage] : anime.coverImage ? [anime.coverImage] : undefined,
+    },
+    alternates: { canonical: `${siteUrl}/anime/${anime.slug}` },
+  };
 }
 
 async function getAnimeFromDb(slug: string): Promise<AnimeType | null> {
@@ -76,8 +93,20 @@ export default async function Page({ params }: Props) {
 }
 
 function render(anime: AnimeType) {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const breadcrumb = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: `${siteUrl}/` },
+      { "@type": "ListItem", position: 2, name: anime.title, item: `${siteUrl}/anime/${anime.slug}` },
+    ],
+  } as const;
+
   return (
     <main className="max-w-6xl mx-auto p-6">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }} />
+
       {anime.bannerImage && (
         <div className="mb-6">
           <Image src={anime.bannerImage} alt={`${anime.title} banner`} width={1600} height={400} className="w-full h-auto object-cover rounded-lg" />
